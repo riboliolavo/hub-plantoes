@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hub de Plantões & Avaliações Médicas</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+  <style>* { box-sizing: border-box; margin: 0; padding: 0; } body { background: #0F172A; }</style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState } = React;
+
+    // ─── CONFIGURAÇÃO ─────────────────────────────────────────────────────────
+    // Cole aqui a URL do seu Google Apps Script depois de publicar
+    const APPS_SCRIPT_URL = "COLE_AQUI_A_URL_DO_APPS_SCRIPT";
+
+    // ─── Data ─────────────────────────────────────────────────────────────────
+    const MEDICO_SECTIONS = [
+      {
+        id: "perfil_rapido",
+        title: "Sobre você",
+        questions: [
+          {
+            id: "especialidade", type: "radio",
+            label: "Qual é a sua situação atual?",
+            options: ["Residente (R1, R2 ou R3)","Médico recém-formado (até 3 anos de CRM)","Médico com 3 a 10 anos de formado","Médico com mais de 10 anos de formado","Estudante de medicina (internato)"],
+            required: true,
+          },
+          {
+            id: "plantoes_mes", type: "radio",
+            label: "Quantos plantões você faz por mês em média?",
+            options: ["Nenhum por enquanto","1 a 2","3 a 5","6 a 10","Mais de 10"],
+            required: true,
+          },
+          {
+            id: "renda_plantao", type: "radio",
+            label: "Os plantões representam qual parcela da sua renda mensal?",
+            options: ["Menos de 25%","25% a 50%","50% a 75%","Mais de 75% (principal fonte de renda)","Prefiro não responder"],
+            required: true,
+          },
+        ],
+      },
+      {
+        id: "canal",
+        title: "Como você encontra plantões hoje",
+        questions: [
+          {
+            id: "canais_usados", type: "checkbox",
+            label: "Quais canais você usou nos últimos 3 meses para encontrar plantões? (marque todos)",
+            options: ["Grupos de WhatsApp de colegas","Grupos de WhatsApp de passagem de plantão","Indicação direta de amigos / colegas","Contato direto com hospitais / clínicas","Plataformas ou apps específicos","Redes sociais (Instagram, LinkedIn)","Grupos no Telegram","Outro"],
+            required: true,
+          },
+          {
+            id: "grupos_whatsapp", type: "radio",
+            label: "Quantos grupos de WhatsApp relacionados a plantões você participa atualmente?",
+            options: ["Nenhum","1 a 2","3 a 5","6 a 10","Mais de 10"],
+            required: true,
+          },
+          {
+            id: "canal_principal", type: "radio",
+            label: "Qual desses canais costuma trazer as melhores vagas pra você?",
+            options: ["Grupos de WhatsApp","Indicação de colegas","Contato direto com hospitais","Plataforma ou app","Redes sociais","Todos funcionam igual","Nenhum funciona bem"],
+            required: true,
+          },
+        ],
+      },
+      {
+        id: "dor",
+        title: "O dia a dia na prática",
+        questions: [
+          {
+            id: "perda_frequencia", type: "radio",
+            label: "Com que frequência você perde ou deixa passar uma mensagem de plantão nos grupos?",
+            options: ["Nunca aconteceu comigo","Raramente (1 ou 2 vezes no ano)","Às vezes (a cada poucos meses)","Frequentemente (todo mês)","Muito frequentemente (toda semana)"],
+            required: true,
+          },
+          {
+            id: "tempo_gasto", type: "radio",
+            label: "Quanto tempo você gasta por semana gerenciando mensagens de plantão (ler, responder, confirmar)?",
+            options: ["Menos de 15 minutos","15 a 30 minutos","30 minutos a 1 hora","1 a 2 horas","Mais de 2 horas"],
+            required: true,
+          },
+          {
+            id: "pesquisa_ferramenta", type: "radio",
+            label: "Você já tentou usar algum app ou ferramenta para organizar as vagas de plantão?",
+            options: ["Nunca pensei nisso","Pensei mas não cheguei a pesquisar","Pesquisei mas não encontrei nada útil","Encontrei algo mas não usei","Usei e abandonei — não funcionou","Uso algo atualmente"],
+            required: true,
+          },
+          {
+            id: "ferramenta_qual", type: "radio",
+            label: "Se tentou usar algo, o que foi?",
+            options: ["Planilha (Excel / Google Sheets)","Favoritar mensagens no WhatsApp","App específico para plantões","Agenda / calendário do celular","Nunca tentei nada","Outro"],
+            required: false,
+          },
+        ],
+      },
+      {
+        id: "avaliacoes",
+        title: "Avaliações de hospitais e clínicas",
+        questions: [
+          {
+            id: "recusou_plantao", type: "radio",
+            label: "Você já recusou ir a um plantão depois de ouvir algo ruim sobre o local?",
+            options: ["Sim","Não","Nunca recebi informação ruim antes de aceitar"],
+            required: true,
+          },
+          {
+            id: "como_descobre_qualidade", type: "checkbox",
+            label: "Como você descobre se um hospital ou clínica é bom antes de ir pela primeira vez?",
+            options: ["Pergunto para colegas de confiança","Procuro no Google / redes sociais","Aceito sem pesquisar — aprendo na hora","Confio na indicação de quem me mandou a vaga","Tenho experiência prévia no local","Pesquiso grupos de médicos online","Outro"],
+            required: true,
+          },
+          {
+            id: "experiencia_ruim", type: "radio",
+            label: "Você já chegou a um plantão e encontrou uma situação muito diferente do que foi prometido?",
+            options: ["Sim, aconteceu mais de uma vez","Sim, aconteceu uma vez","Não, sempre foi como esperado","Não tenho como comparar — foi meu primeiro plantão lá"],
+            required: true,
+          },
+          {
+            id: "avaliaria_anonimo", type: "radio",
+            label: "Se você pudesse dar uma nota anônima para um local onde fez plantão, você avaliaria?",
+            options: ["Sim, avaliaria sem problemas","Sim, mas só se tivesse certeza do anonimato","Não — não me sinto confortável mesmo assim","Não — não vejo utilidade nisso"],
+            required: true,
+          },
+          {
+            id: "receio_avaliacao", type: "radio",
+            label: "Qual seria seu principal receio ao avaliar negativamente um local?",
+            options: ["Represália ou retaliação","Prejudicar colegas que ainda trabalham lá","Não acredito que faria diferença","Não tenho receio nenhum","Outro"],
+            required: false,
+          },
+        ],
+      },
+      {
+        id: "contato",
+        title: "Para fechar",
+        questions: [
+          {
+            id: "contato_futuro", type: "radio",
+            label: "Posso entrar em contato para uma conversa rápida de 15 min sobre esse tema?",
+            options: ["Sim, pode entrar em contato","Não, prefiro não"],
+            required: true,
+          },
+          {
+            id: "contato_info", type: "text",
+            label: "Se sim — WhatsApp ou e-mail (opcional):",
+            placeholder: "Seus dados ficam protegidos e não serão compartilhados.",
+            required: false,
+          },
+        ],
+      },
+    ];
+
+    const HOSPITAL_SECTIONS = [
+      {
+        id: "perfil_instituicao",
+        title: "Sobre a instituição",
+        questions: [
+          {
+            id: "tipo_instituicao", type: "radio",
+            label: "Como você descreveria a sua instituição?",
+            options: ["Hospital público (SUS)","Hospital privado","Clínica médica / policlínica","UPA ou pronto-socorro","Hospital universitário","Outro"],
+            required: true,
+          },
+          {
+            id: "leitos", type: "radio",
+            label: "Quantos leitos (ou salas de atendimento) a instituição possui?",
+            options: ["Menos de 30","30 a 100","100 a 300","Mais de 300","Não se aplica ao nosso modelo"],
+            required: false,
+          },
+          {
+            id: "orcamento_origem", type: "radio",
+            label: "De qual área vem o orçamento para contratar médicos plantonistas?",
+            options: ["RH / Gestão de Pessoas","Diretoria Médica","Diretoria Administrativa / Financeira","Gestão do hospital / superintendência","Não sei / outra área"],
+            required: true,
+          },
+          {
+            id: "decisor", type: "radio",
+            label: "Para assinar um novo serviço ou ferramenta de recrutamento médico, quem precisa aprovar?",
+            options: ["Eu mesmo posso decidir","Eu e mais 1 pessoa","Comitê ou diretoria (3 ou mais pessoas)","Decisão centralizada em outra área"],
+            required: true,
+          },
+        ],
+      },
+      {
+        id: "recrutamento",
+        title: "Como você recruta plantonistas hoje",
+        questions: [
+          {
+            id: "ferramentas_usadas", type: "checkbox",
+            label: "Quais ferramentas ou métodos vocês usam atualmente para recrutar? (marque todos)",
+            options: ["Lista de contatos no celular / agenda","Grupos de WhatsApp","Planilhas (Excel / Google Sheets)","Sistema de gestão interno (HIS / ERP)","Agência ou empresa de recrutamento médico","Plataforma digital específica","Indicações de outros médicos","Outro"],
+            required: true,
+          },
+          {
+            id: "plantao_descoberto", type: "radio",
+            label: "Com que frequência vocês ficam com plantão descoberto (sem médico disponível)?",
+            options: ["Nunca ou raramente","Às vezes (a cada poucos meses)","Toda semana","Várias vezes por semana","Prefiro não responder"],
+            required: true,
+          },
+          {
+            id: "tempo_recrutamento", type: "radio",
+            label: "Quanto tempo a equipe administrativa gasta por semana buscando e confirmando plantonistas?",
+            options: ["Menos de 1 hora","1 a 3 horas","3 a 6 horas","Mais de 6 horas","Não sei estimar"],
+            required: true,
+          },
+          {
+            id: "plantao_descoberto_impacto", type: "radio",
+            label: "Quando um plantão fica descoberto, o que costuma acontecer?",
+            options: ["Chamamos alguém em hora extra (pagando mais)","O próprio gestor ou médico fixo cobre","A escala fica vazia mesmo","Cancelamos atendimentos","Raramente acontece, não temos protocolo definido"],
+            required: false,
+          },
+        ],
+      },
+      {
+        id: "custo_problema",
+        title: "O custo do problema",
+        questions: [
+          {
+            id: "gasto_externo", type: "radio",
+            label: "Vocês pagam alguma agência, serviço externo ou plataforma para ajudar no recrutamento?",
+            options: ["Não, fazemos tudo internamente","Sim, eventualmente","Sim, é um processo regular e tem custo fixo"],
+            required: true,
+          },
+          {
+            id: "gasto_valor", type: "radio",
+            label: "Se pagam externamente — em qual faixa de valor mensal?",
+            options: ["Não se aplica","Menos de R$ 500/mês","R$ 500 a R$ 2.000/mês","R$ 2.000 a R$ 5.000/mês","Mais de R$ 5.000/mês","Prefiro não responder"],
+            required: false,
+          },
+          {
+            id: "maior_dor", type: "radio",
+            label: "Qual é o maior problema hoje no processo de recrutamento de plantonistas?",
+            options: ["Encontrar médicos disponíveis na hora certa","Garantir a qualidade e idoneidade dos médicos","Comunicação e confirmação do plantão","Organização e controle das escalas","Custo elevado do processo","Não temos problemas relevantes nessa área"],
+            required: true,
+          },
+        ],
+      },
+      {
+        id: "contato",
+        title: "Para fechar",
+        questions: [
+          {
+            id: "contato_futuro", type: "radio",
+            label: "Posso agendar uma conversa de 20 minutos para aprofundar esse tema?",
+            options: ["Sim, pode entrar em contato","Não, prefiro não"],
+            required: true,
+          },
+          {
+            id: "contato_info", type: "text",
+            label: "Se sim — nome, cargo e WhatsApp ou e-mail:",
+            placeholder: "Ex: Ana Silva, Diretora de RH, 11 99999-9999",
+            required: false,
+          },
+        ],
+      },
+    ];
+
+    // ─── Components ───────────────────────────────────────────────────────────
+
+    const Question = ({ q, value, onChange }) => {
+      const [focused, setFocused] = useState(false);
+      const inputBase = {
+        width: "100%", fontFamily: "'Georgia', serif", fontSize: "14px",
+        color: "#1E293B", border: "1.5px solid #CBD5E1", borderRadius: "8px",
+        outline: "none", transition: "border-color 0.2s, box-shadow 0.2s", boxSizing: "border-box",
+      };
+      const focusStyle = { borderColor: "#3B82F6", boxShadow: "0 0 0 3px rgba(59,130,246,0.12)" };
+
+      return (
+        <div style={{ marginBottom: "28px" }}>
+          <label style={{
+            display: "block", fontSize: "14px", fontWeight: "600", color: "#1E293B",
+            marginBottom: "10px", lineHeight: "1.5", fontFamily: "'Georgia', serif",
+          }}>
+            {q.label}
+            {q.required && <span style={{ color: "#EF4444", marginLeft: "4px" }}>*</span>}
+          </label>
+
+          {q.type === "textarea" && (
+            <textarea rows={3} placeholder={q.placeholder} value={value || ""}
+              onChange={e => onChange(q.id, e.target.value)}
+              onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
+              style={{ ...inputBase, padding: "12px 14px", resize: "vertical", minHeight: "80px", ...(focused ? focusStyle : {}) }}
+            />
+          )}
+
+          {q.type === "text" && (
+            <input type="text" placeholder={q.placeholder} value={value || ""}
+              onChange={e => onChange(q.id, e.target.value)}
+              onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
+              style={{ ...inputBase, padding: "11px 14px", ...(focused ? focusStyle : {}) }}
+            />
+          )}
+
+          {q.type === "radio" && (
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+              {q.options.map(opt => {
+                const selected = value === opt;
+                return (
+                  <label key={opt} onClick={() => onChange(q.id, opt)} style={{
+                    display: "flex", alignItems: "center", gap: "10px",
+                    padding: "10px 14px", borderRadius: "8px",
+                    border: `1.5px solid ${selected ? "#3B82F6" : "#E2E8F0"}`,
+                    background: selected ? "#EFF6FF" : "#FAFAFA", cursor: "pointer",
+                    transition: "all 0.15s", fontFamily: "'Georgia', serif",
+                    fontSize: "13.5px", color: selected ? "#1D4ED8" : "#374151",
+                  }}>
+                    <div style={{
+                      width: "18px", height: "18px", borderRadius: "50%",
+                      border: `2px solid ${selected ? "#3B82F6" : "#94A3B8"}`,
+                      background: selected ? "#3B82F6" : "white", flexShrink: 0,
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                    }}>
+                      {selected && <div style={{ width: "7px", height: "7px", borderRadius: "50%", background: "white" }} />}
+                    </div>
+                    {opt}
+                  </label>
+                );
+              })}
+            </div>
+          )}
+
+          {q.type === "checkbox" && (
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+              {q.options.map(opt => {
+                const checked = Array.isArray(value) && value.includes(opt);
+                return (
+                  <label key={opt} onClick={() => {
+                    const prev = Array.isArray(value) ? value : [];
+                    const next = checked ? prev.filter(v => v !== opt) : [...prev, opt];
+                    onChange(q.id, next);
+                  }} style={{
+                    display: "flex", alignItems: "center", gap: "10px",
+                    padding: "10px 14px", borderRadius: "8px",
+                    border: `1.5px solid ${checked ? "#10B981" : "#E2E8F0"}`,
+                    background: checked ? "#F0FDF4" : "#FAFAFA", cursor: "pointer",
+                    transition: "all 0.15s", fontFamily: "'Georgia', serif",
+                    fontSize: "13.5px", color: checked ? "#065F46" : "#374151",
+                  }}>
+                    <div style={{
+                      width: "18px", height: "18px", borderRadius: "4px",
+                      border: `2px solid ${checked ? "#10B981" : "#94A3B8"}`,
+                      background: checked ? "#10B981" : "white", flexShrink: 0,
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                    }}>
+                      {checked && <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
+                        <path d="M1 4l2.5 2.5L9 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>}
+                    </div>
+                    {opt}
+                  </label>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      );
+    };
+
+    const ProgressBar = ({ current, total }) => (
+      <div style={{ marginBottom: "8px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px" }}>
+          <span style={{ fontSize: "11px", color: "#64748B", fontFamily: "monospace", letterSpacing: "0.08em" }}>
+            SEÇÃO {current} DE {total}
+          </span>
+          <span style={{ fontSize: "11px", color: "#64748B", fontFamily: "monospace" }}>
+            {Math.round((current / total) * 100)}%
+          </span>
+        </div>
+        <div style={{ height: "4px", background: "#E2E8F0", borderRadius: "2px", overflow: "hidden" }}>
+          <div style={{
+            height: "100%", width: `${(current / total) * 100}%`,
+            background: "linear-gradient(90deg, #3B82F6, #06B6D4)",
+            borderRadius: "2px", transition: "width 0.4s ease",
+          }}/>
+        </div>
+      </div>
+    );
+
+    // ─── Main App ─────────────────────────────────────────────────────────────
+    function App() {
+      const [stage, setStage] = useState("welcome");
+      const [perfil, setPerfil] = useState(null);
+      const [sectionIndex, setSectionIndex] = useState(0);
+      const [answers, setAnswers] = useState({});
+      const [errors, setErrors] = useState({});
+      const [animating, setAnimating] = useState(false);
+      const [sending, setSending] = useState(false);
+      const [sendError, setSendError] = useState(false);
+
+      const sections = perfil === "medico" ? MEDICO_SECTIONS : HOSPITAL_SECTIONS;
+      const currentSection = sections[sectionIndex];
+
+      const handleAnswer = (qId, val) => {
+        setAnswers(prev => ({ ...prev, [qId]: val }));
+        setErrors(prev => { const n = {...prev}; delete n[qId]; return n; });
+      };
+
+      const validate = () => {
+        const errs = {};
+        currentSection.questions.forEach(q => {
+          if (q.required) {
+            const v = answers[q.id];
+            if (!v || (Array.isArray(v) && v.length === 0) || (typeof v === "string" && !v.trim())) {
+              errs[q.id] = "Campo obrigatório";
+            }
+          }
+        });
+        setErrors(errs);
+        return Object.keys(errs).length === 0;
+      };
+
+      const submitToSheets = async () => {
+        setSending(true);
+        setSendError(false);
+        try {
+          const payload = {
+            perfil,
+            timestamp: new Date().toISOString(),
+            ...answers,
+            // Transforma arrays (checkbox) em string separada por vírgula
+            ...Object.fromEntries(
+              Object.entries(answers).map(([k, v]) => [k, Array.isArray(v) ? v.join(", ") : v])
+            ),
+          };
+          await fetch(APPS_SCRIPT_URL, {
+            method: "POST",
+            mode: "no-cors",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+          setStage("done");
+        } catch (e) {
+          setSendError(true);
+        } finally {
+          setSending(false);
+        }
+      };
+
+      const next = () => {
+        if (!validate()) return;
+        setAnimating(true);
+        setTimeout(() => {
+          if (sectionIndex < sections.length - 1) {
+            setSectionIndex(i => i + 1);
+          } else {
+            submitToSheets();
+          }
+          setAnimating(false);
+        }, 220);
+      };
+
+      const back = () => {
+        setAnimating(true);
+        setTimeout(() => {
+          if (sectionIndex > 0) setSectionIndex(i => i - 1);
+          else setStage("welcome");
+          setAnimating(false);
+        }, 220);
+      };
+
+      // ── Welcome ──
+      if (stage === "welcome") return (
+        <div style={{
+          minHeight: "100vh",
+          background: "linear-gradient(160deg, #0F172A 0%, #1E3A5F 50%, #0F172A 100%)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          padding: "24px", fontFamily: "'Georgia', serif",
+        }}>
+          <div style={{ maxWidth: "580px", width: "100%", textAlign: "center" }}>
+            <div style={{
+              display: "inline-flex", alignItems: "center", gap: "6px",
+              background: "rgba(59,130,246,0.15)", border: "1px solid rgba(59,130,246,0.35)",
+              borderRadius: "20px", padding: "5px 14px", marginBottom: "28px",
+            }}>
+              <div style={{ width: "7px", height: "7px", borderRadius: "50%", background: "#60A5FA" }}/>
+              <span style={{ fontSize: "11px", color: "#93C5FD", letterSpacing: "0.08em", fontFamily: "monospace" }}>
+                PESQUISA DE DESCOBERTA — CONFIDENCIAL
+              </span>
+            </div>
+            <h1 style={{ fontSize: "clamp(28px, 5vw, 38px)", fontWeight: "normal", color: "white", margin: "0 0 12px", lineHeight: "1.25" }}>
+              Hub de Plantões<br/>
+              <span style={{ color: "#60A5FA" }}>& Avaliações Médicas</span>
+            </h1>
+            <p style={{ fontSize: "15px", color: "#94A3B8", lineHeight: "1.7", margin: "0 0 36px", maxWidth: "460px", marginLeft: "auto", marginRight: "auto" }}>
+              Esta pesquisa leva <strong style={{ color: "#CBD5E1" }}>menos de 5 minutos</strong> e é sobre como você
+              encontra e gerencia plantões hoje. Sem julgamentos — queremos entender a sua rotina real.
+            </p>
+            <p style={{ fontSize: "13px", color: "#94A3B8", marginBottom: "20px" }}>Você é:</p>
+            <div style={{ display: "flex", gap: "14px", flexWrap: "wrap", justifyContent: "center" }}>
+              {[
+                { key: "medico", emoji: "🩺", title: "Médico", sub: "Faço ou busco plantões" },
+                { key: "hospital", emoji: "🏥", title: "Gestor / Instituição", sub: "Contrato plantonistas" },
+              ].map(p => (
+                <button key={p.key} onClick={() => { setPerfil(p.key); setStage("form"); setSectionIndex(0); setAnswers({}); }} style={{
+                  flex: "1", minWidth: "180px", background: "rgba(255,255,255,0.04)",
+                  border: "1.5px solid rgba(255,255,255,0.12)", borderRadius: "12px",
+                  padding: "20px 16px", cursor: "pointer", textAlign: "center",
+                  transition: "all 0.2s", color: "white",
+                }}
+                  onMouseEnter={e => { e.currentTarget.style.background = "rgba(59,130,246,0.15)"; e.currentTarget.style.borderColor = "rgba(59,130,246,0.5)"; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = "rgba(255,255,255,0.04)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.12)"; }}
+                >
+                  <div style={{ fontSize: "28px", marginBottom: "8px" }}>{p.emoji}</div>
+                  <div style={{ fontWeight: "bold", fontSize: "15px", marginBottom: "4px" }}>{p.title}</div>
+                  <div style={{ fontSize: "12px", color: "#64748B" }}>{p.sub}</div>
+                </button>
+              ))}
+            </div>
+            <p style={{ marginTop: "28px", fontSize: "11px", color: "#334155" }}>
+              Suas respostas são confidenciais e usadas apenas para pesquisa de produto.
+            </p>
+          </div>
+        </div>
+      );
+
+      // ── Done ──
+      if (stage === "done") return (
+        <div style={{
+          minHeight: "100vh",
+          background: "linear-gradient(160deg, #0F172A 0%, #064E3B 100%)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          padding: "24px", fontFamily: "'Georgia', serif",
+        }}>
+          <div style={{ maxWidth: "520px", width: "100%", textAlign: "center" }}>
+            <div style={{
+              width: "64px", height: "64px", borderRadius: "50%",
+              background: "linear-gradient(135deg, #10B981, #059669)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              margin: "0 auto 24px", fontSize: "28px",
+              boxShadow: "0 0 0 12px rgba(16,185,129,0.15)",
+            }}>✓</div>
+            <h1 style={{ color: "white", fontSize: "28px", fontWeight: "normal", margin: "0 0 12px" }}>
+              Obrigado pela sua resposta!
+            </h1>
+            <p style={{ color: "#6EE7B7", fontSize: "15px", margin: "0 0 28px", lineHeight: "1.6" }}>
+              Sua experiência real é exatamente o que precisamos para entender se faz sentido construir essa plataforma.
+            </p>
+            <div style={{
+              background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)",
+              borderRadius: "10px", padding: "18px 20px", textAlign: "left", marginBottom: "24px",
+            }}>
+              <p style={{ color: "#94A3B8", fontSize: "13px", lineHeight: "1.7", margin: 0 }}>
+                <strong style={{ color: "#CBD5E1" }}>Próximos passos:</strong> Se você indicou interesse
+                em conversar, entraremos em contato em até 5 dias úteis para uma conversa rápida de 15 min.
+                Sem pitch, sem venda — só queremos ouvir mais sobre sua rotina.
+              </p>
+            </div>
+            <button onClick={() => { setStage("welcome"); setSectionIndex(0); setAnswers({}); setErrors({}); }} style={{
+              background: "transparent", border: "1px solid rgba(255,255,255,0.2)",
+              color: "#94A3B8", padding: "10px 20px", borderRadius: "8px",
+              cursor: "pointer", fontSize: "13px", fontFamily: "'Georgia', serif",
+            }}>
+              Responder novamente
+            </button>
+          </div>
+        </div>
+      );
+
+      // ── Form ──
+      return (
+        <div style={{ minHeight: "100vh", background: "#F8FAFC", fontFamily: "'Georgia', serif" }}>
+          <div style={{
+            background: "linear-gradient(135deg, #0F172A 0%, #1E3A5F 100%)",
+            padding: "16px 24px", display: "flex", alignItems: "center",
+            justifyContent: "space-between", flexWrap: "wrap", gap: "12px",
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              <div style={{
+                width: "32px", height: "32px", borderRadius: "8px",
+                background: "linear-gradient(135deg, #3B82F6, #06B6D4)",
+                display: "flex", alignItems: "center", justifyContent: "center", fontSize: "14px",
+              }}>🩺</div>
+              <div>
+                <div style={{ color: "white", fontSize: "13px", fontWeight: "bold" }}>Hub de Plantões</div>
+                <div style={{ color: "#64748B", fontSize: "11px", fontFamily: "monospace" }}>
+                  {perfil === "medico" ? "PERFIL: MÉDICO" : "PERFIL: GESTOR / INSTITUIÇÃO"}
+                </div>
+              </div>
+            </div>
+            <button onClick={() => setStage("welcome")} style={{
+              background: "transparent", border: "none", color: "#64748B",
+              fontSize: "11px", cursor: "pointer", fontFamily: "monospace", letterSpacing: "0.05em",
+            }}>← TROCAR PERFIL</button>
+          </div>
+
+          <div style={{ maxWidth: "640px", margin: "0 auto", padding: "32px 20px 60px" }}>
+            <ProgressBar current={sectionIndex + 1} total={sections.length} />
+            <div style={{
+              opacity: animating ? 0 : 1,
+              transform: animating ? "translateY(8px)" : "translateY(0)",
+              transition: "opacity 0.22s, transform 0.22s",
+            }}>
+              <div style={{
+                background: "white", borderRadius: "14px",
+                border: "1px solid #E2E8F0", boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
+                overflow: "hidden", marginBottom: "20px",
+              }}>
+                <div style={{ background: "linear-gradient(135deg, #0F172A 0%, #1E3A5F 100%)", padding: "20px 24px" }}>
+                  <div style={{ fontSize: "11px", color: "#60A5FA", fontFamily: "monospace", letterSpacing: "0.08em", marginBottom: "6px" }}>
+                    SEÇÃO {sectionIndex + 1} / {sections.length}
+                  </div>
+                  <h2 style={{ color: "white", margin: 0, fontSize: "18px", fontWeight: "normal" }}>
+                    {currentSection.title}
+                  </h2>
+                </div>
+                <div style={{ padding: "24px" }}>
+                  {currentSection.questions.map(q => (
+                    <div key={q.id}>
+                      <Question q={q} value={answers[q.id]} onChange={handleAnswer} />
+                      {errors[q.id] && (
+                        <p style={{ color: "#EF4444", fontSize: "12px", margin: "-20px 0 20px", fontFamily: "monospace" }}>
+                          ⚠ {errors[q.id]}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {sendError && (
+                <div style={{ background: "#FEF2F2", border: "1px solid #FECACA", borderRadius: "8px", padding: "12px 16px", marginBottom: "16px" }}>
+                  <p style={{ color: "#DC2626", fontSize: "13px", margin: 0, fontFamily: "'Georgia', serif" }}>
+                    ⚠ Erro ao enviar. Verifique sua conexão e tente novamente.
+                  </p>
+                </div>
+              )}
+
+              <div style={{ display: "flex", gap: "12px", justifyContent: "space-between", alignItems: "center" }}>
+                <button onClick={back} style={{
+                  background: "white", border: "1.5px solid #E2E8F0",
+                  color: "#64748B", padding: "12px 20px", borderRadius: "8px",
+                  cursor: "pointer", fontSize: "13px", fontFamily: "'Georgia', serif", transition: "all 0.15s",
+                }}>← Voltar</button>
+                <button onClick={next} disabled={sending} style={{
+                  background: sending ? "#94A3B8" : "linear-gradient(135deg, #1D4ED8, #0EA5E9)",
+                  border: "none", color: "white", padding: "12px 28px", borderRadius: "8px",
+                  cursor: sending ? "not-allowed" : "pointer", fontSize: "14px",
+                  fontFamily: "'Georgia', serif", fontWeight: "bold",
+                  boxShadow: sending ? "none" : "0 4px 14px rgba(29,78,216,0.35)", transition: "all 0.15s",
+                }}>
+                  {sending ? "Enviando..." : sectionIndex < sections.length - 1 ? "Próxima seção →" : "Enviar respostas ✓"}
+                </button>
+              </div>
+
+              <div style={{ display: "flex", justifyContent: "center", gap: "6px", marginTop: "20px" }}>
+                {sections.map((_, i) => (
+                  <div key={i} style={{
+                    width: i === sectionIndex ? "20px" : "7px", height: "7px", borderRadius: "4px",
+                    background: i < sectionIndex ? "#10B981" : i === sectionIndex ? "#3B82F6" : "#E2E8F0",
+                    transition: "all 0.3s",
+                  }}/>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
+</html>
